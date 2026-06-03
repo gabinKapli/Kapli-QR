@@ -142,7 +142,7 @@
             const statusEl = document.getElementById("status");
 
             const urlParams = new URLSearchParams(window.location.search);
-            const detailScreenId = urlParams.get("screen") || "d83f52";
+            const detailPath = "d83f52/r/";
             const confirmEnabled = !["0", "false", "no"].includes(
                 urlParams.get("confirm")?.toLowerCase()
             );
@@ -176,7 +176,10 @@
 
                 if (manualBaseUrl) {
                     try {
-                        return new URL(manualBaseUrl).toString();
+                        const manualGlideRoot = getGlideRootFromUrl(manualBaseUrl);
+                        const manualRoot = manualGlideRoot || new URL(manualBaseUrl).toString();
+
+                        return `${manualRoot.replace(/\/$/, "")}/${detailPath}`;
                     } catch (error) {
                         return null;
                     }
@@ -188,7 +191,7 @@
 
                 if (!glideRoot) return null;
 
-                return `${glideRoot}${encodeURIComponent(detailScreenId)}/r/`;
+                return `${glideRoot}${detailPath}`;
             }
 
             function getTargetUrl(scannedText) {
