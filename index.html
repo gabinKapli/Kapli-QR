@@ -122,7 +122,7 @@
 
         <div id="overlay">
             <div id="overlayCard">
-                <div id="overlayTitle">Lien detecte</div>
+                <div id="overlayTitle">Produit detecte</div>
                 <div id="overlayData">-</div>
                 <div id="overlayActions">
                     <button id="confirmBtn" type="button">Ouvrir la fiche</button>
@@ -142,7 +142,7 @@
             const statusEl = document.getElementById("status");
 
             const urlParams = new URLSearchParams(window.location.search);
-            const baseUrl = urlParams.get("base") || "";
+            const detailScreenId = urlParams.get("screen") || "d83f52";
             const confirmEnabled = !["0", "false", "no"].includes(
                 urlParams.get("confirm")?.toLowerCase()
             );
@@ -156,20 +156,74 @@
                 statusEl.className = type;
             }
 
-            function getTargetUrl(scannedText) {
-                try {
-                    const rawUrl = baseUrl
-                        ? baseUrl + encodeURIComponent(scannedText)
-                        : scannedText;
-                    const targetUrl = new URL(rawUrl);
+            function getGlideRootFromUrl(value) {
+                if (!value) return null;
 
-                    if (!["http:", "https:"].includes(targetUrl.protocol)) {
+                try {
+                    const url = new URL(value);
+                    const match = url.pathname.match(/^(\/dl\/[^/]+\/s\/)/);
+
+                    if (!match) return null;
+
+                    return `${url.origin}${match[1]}`;
+                } catch (error) {
+                    return null;
+                }
+            }
+
+            function getDetailBaseUrl() {
+                const manualBaseUrl = urlParams.get("base");
+
+                if (manualBaseUrl) {
+                    try {
+                        return new URL(manualBaseUrl).toString();
+                    } catch (error) {
+                        return null;
+                    }
+                }
+
+                const glideRoot =
+                    getGlideRootFromUrl(urlParams.get("source")) ||
+                    getGlideRootFromUrl(document.referrer);
+
+                if (!glideRoot) return null;
+
+                return `${glideRoot}${encodeURIComponent(detailScreenId)}/r/`;
+            }
+
+            function getTargetUrl(scannedText) {
+                const cleanText = String(scannedText || "").trim();
+
+                if (!cleanText) {
+                    return null;
+                }
+
+                try {
+                    const scannedUrl = new URL(cleanText);
+
+                    if (!["http:", "https:"].includes(scannedUrl.protocol)) {
                         return null;
                     }
 
-                    return targetUrl.toString();
+                    return scannedUrl.toString();
                 } catch (error) {
-                    return null;
+                    try {
+                        const baseUrl = getDetailBaseUrl();
+
+                        if (!baseUrl) {
+                            return null;
+                        }
+
+                        const targetUrl = new URL(encodeURIComponent(cleanText), baseUrl);
+
+                        if (!["http:", "https:"].includes(targetUrl.protocol)) {
+                            return null;
+                        }
+
+                        return targetUrl.toString();
+                    } catch (innerError) {
+                        return null;
+                    }
                 }
             }
 
@@ -177,7 +231,7 @@
                 const targetUrl = getTargetUrl(scannedText);
 
                 if (!targetUrl) {
-                    setStatus("Le QR code ne contient pas une URL valide.", "error");
+                    setStatus("Impossible de construire l'URL Glide.", "error");
                     return false;
                 }
 
