@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Kapli-QR</title>
+        <script src="https://unpkg.com/html5-qrcode"></script>
+
+        <style>
+            :root {
+                --radius-lg: 12px;
+                --radius-md: 10px;
+                --radius-sm: 8px;
+                --bg: #ffffff;
+                --bg-muted: #f3f3f3;
+                --text: #111111;
+                --text-muted: #666666;
+                --border: #cccccc;
+                --overlay: rgba(0, 0, 0, 0.6);
+                --danger: #b00020;
+                --success: #137333;
+            }
+
+            body {
+                margin: 0;
+                padding: 20px;
+                font-family: system-ui, sans-serif;
+            }
+
+            #reader {
+                width: min(512px, 100%);
+                margin: 0 auto;
+                border-radius: var(--radius-lg);
+                overflow: hidden;
+            }
+
+            #reader video {
+                border-radius: var(--radius-md);
+                width: 100%;
+            }
+
+            #overlay {
+                position: fixed;
+                inset: 0;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                background: var(--overlay);
+                z-index: 9999;
+            }
+
+            #overlayCard {
+                background: var(--bg);
+                padding: 20px;
+                border-radius: var(--radius-lg);
+                width: min(90vw, 400px);
+                text-align: center;
+            }
+
+            #overlayTitle {
+                font-weight: 700;
+            }
+
+            #overlayData {
+                margin: 15px 0;
+                padding: 12px;
+                background: var(--bg-muted);
+                border-radius: var(--radius-sm);
+                word-break: break-all;
+                font-family: monospace;
+            }
+
+            #overlayActions {
+                display: flex;
+                gap: 10px;
+            }
+
+            button {
+                flex: 1;
+                padding: 12px;
+                border-radius: var(--radius-sm);
+                cursor: pointer;
+                font-size: 16px;
+                border: 1px solid var(--border);
+            }
+
+            #confirmBtn {
+                background: var(--text);
+                color: var(--bg);
+                border: none;
+            }
+
+            #cancelBtn {
+                background: var(--bg-muted);
+            }
+
+            #status {
+                margin-top: 12px;
+                color: var(--text-muted);
+                font-size: 14px;
+            }
+
+            #status.error {
+                color: var(--danger);
+            }
+
+            #status.success {
+                color: var(--success);
+            }
+        </style>
+    </head>
+
+    <body>
+        <div id="reader"></div>
+
+        <div id="overlay">
+            <div id="overlayCard">
+                <div id="overlayTitle">QR code detecte</div>
+                <div id="overlayData">-</div>
+                <div id="overlayActions">
+                    <button id="confirmBtn" type="button">Confirmer</button>
+                    <button id="cancelBtn" type="button">Annuler</button>
+                </div>
+                <div id="status">Scan pret</div>
+            </div>
+        </div>
+
+        <script>
+            const overlay = document.getElementById("overlay");
+            const overlayData = document.getElementById("overlayData");
+            const confirmBtn = document.getElementById("confirmBtn");
+            const cancelBtn = document.getElementById("cancelBtn");
+            const statusEl = document.getElementById("status");
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const endpoint = urlParams.get("endpoint");
+            const tab = urlParams.get("tab") || "";
+            const confirmEnabled = !["0", "false", "no"].includes(
+                urlParams.get("confirm")?.toLowerCase()
+            );
+
+            const html5QrCode = new Html5Qrcode("reader");
+            let lastDecodedText = null;
+            let isBusy = false;
+
+            function setStatus(message, type = "") {
+                statusEl.textContent = message;
+                statusEl.className = type;
+            }
+
+            function extraParams() {
+                const ignoredParams = new Set(["endpoint", "confirm"]);
+                const params = {};
+
+                urlParams.forEach((value, key) => {
+                    if (!ignoredParams.has(key)) {
+                        params[key] = value;
+                    }
+                });
+
+                return params;
+            }
+
+            function webhookUrl() {
+                const targetUrl = new URL(endpoint);
+
+                Object.entries(extraParams()).forEach(([key, value]) => {
+                    targetUrl.searchParams.set(key, value);
+                });
+
+                return targetUrl.toString();
+            }
+
+            async function sendToGlide(scannedText) {
+                if (!endpoint) {
+                    setStatus("Webhook manquant dans le parametre endpoint.", "error");
+                    return;
+                }
+
+                confirmBtn.disabled = true;
+                cancelBtn.disabled = true;
+                setStatus("Envoi en cours...");
+
+                try {
+                    const response = await fetch(webhookUrl(), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            qr: scannedText,
+                            text: scannedText,
+                            tab,
+                            params: extraParams(),
+                            scannedAt: new Date().toISOString(),
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error("Erreur webhook");
+                    }
+
+                    setStatus("Envoye a Glide.", "success");
+                    hideOverlay();
+
+                    setTimeout(() => {
+                        confirmBtn.disabled = false;
+                        cancelBtn.disabled = false;
+                        isBusy = false;
+                        resumeScanning();
+                    }, 700);
+                } catch (error) {
+                    setStatus("Impossible d'envoyer au webhook.", "error");
+                    confirmBtn.disabled = false;
+                    cancelBtn.disabled = false;
+
+                    if (!confirmEnabled) {
+                        isBusy = false;
+                        resumeScanning();
+                    }
+                }
+            }
+
+            function showOverlay(text) {
+                lastDecodedText = text;
+                overlayData.textContent = text;
+                overlay.style.display = "flex";
+                setStatus("Pret a envoyer a Glide.");
+                html5QrCode.pause(true);
+            }
+
+            function hideOverlay() {
+                overlay.style.display = "none";
+                lastDecodedText = null;
+            }
+
+            async function resumeScanning() {
+                try {
+                    await html5QrCode.resume();
+                } catch (error) {
+                    startScanning();
+                }
+            }
+
+            async function startScanning() {
+                try {
+                    await html5QrCode.start(
+                        { facingMode: "environment" },
+                        { fps: 10, qrbox: { width: 250, height: 250 } },
+                        (decodedText) => {
+                            if (isBusy) return;
+                            isBusy = true;
+
+                            if (!endpoint) {
+                                showOverlay(decodedText);
+                                setStatus("Webhook manquant dans le parametre endpoint.", "error");
+                                return;
+                            }
+
+                            if (confirmEnabled) {
+                                showOverlay(decodedText);
+                            } else {
+                                sendToGlide(decodedText);
+                            }
+                        },
+                        () => {}
+                    );
+                } catch (error) {
+                    setStatus("Camera non disponible.", "error");
+                }
+            }
+
+            confirmBtn.addEventListener("click", () => {
+                if (lastDecodedText) {
+                    sendToGlide(lastDecodedText);
+                }
+            });
+
+            cancelBtn.addEventListener("click", () => {
+                hideOverlay();
+                isBusy = false;
+                resumeScanning();
+            });
+
+            startScanning();
+        </script>
+    </body>
+</html>
