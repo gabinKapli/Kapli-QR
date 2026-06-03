@@ -1,3 +1,6 @@
+l'url a mettre dans le component web embed via un template dans les colonnes : 
+https://gabinkapli.github.io/Kapli-QR/
+
 Comment ça fonctionne :
 
 1) Le scanner s’ouvre dans un composant Web Embed Glide.
