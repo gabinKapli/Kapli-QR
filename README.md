@@ -1,9 +1,12 @@
-Comment ça fonctionne :
+Comment ca fonctionne :
 
-1) Le scanner s’ouvre dans un composant Web Embed Glide.
-2) La caméra détecte un QR code.
-3) Le texte contenu dans le QR code s’affiche pour confirmation.
-4) Si l’utilisateur confirme, le texte scanné est envoyé au webhook Glide.
-5) Glide reçoit cette valeur et peut ensuite lancer un workflow, par exemple rediriger l’utilisateur, enregistrer une donnée ou afficher une information.
-6) Après l’envoi, le scanner reprend automatiquement.
-7) Le lien du scanner contient le webhook Glide dans le paramètre endpoint, ce qui permet de choisir où envoyer le résultat du scan.
+1) Le scanner s'ouvre dans un composant Web Embed Glide.
+2) La camera detecte un QR code.
+3) Le QR code doit contenir l'URL de la fiche Glide a ouvrir.
+4) Le lien detecte s'affiche pour confirmation.
+5) Quand l'utilisateur clique sur "Ouvrir la fiche", le scanner ouvre l'URL au niveau de la page complete avec `_top`.
+6) L'utilisateur sort donc du Web Embed et arrive directement sur la vraie fiche dans l'application Glide.
+
+Important :
+
+Le mode avec confirmation est conseille, car Glide affiche le scanner dans une iframe. Le clic utilisateur aide le navigateur a autoriser la sortie du Web Embed.

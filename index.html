@@ -107,6 +107,13 @@
             #status.success {
                 color: var(--success);
             }
+
+            #fallbackLink {
+                display: none;
+                margin-top: 12px;
+                color: var(--text);
+                font-weight: 600;
+            }
         </style>
     </head>
 
@@ -115,12 +122,13 @@
 
         <div id="overlay">
             <div id="overlayCard">
-                <div id="overlayTitle">QR code detecte</div>
+                <div id="overlayTitle">Lien detecte</div>
                 <div id="overlayData">-</div>
                 <div id="overlayActions">
-                    <button id="confirmBtn" type="button">Confirmer</button>
+                    <button id="confirmBtn" type="button">Ouvrir la fiche</button>
                     <button id="cancelBtn" type="button">Annuler</button>
                 </div>
+                <a id="fallbackLink" href="#" target="_top" rel="noreferrer">Ouvrir manuellement</a>
                 <div id="status">Scan pret</div>
             </div>
         </div>
@@ -130,11 +138,11 @@
             const overlayData = document.getElementById("overlayData");
             const confirmBtn = document.getElementById("confirmBtn");
             const cancelBtn = document.getElementById("cancelBtn");
+            const fallbackLink = document.getElementById("fallbackLink");
             const statusEl = document.getElementById("status");
 
             const urlParams = new URLSearchParams(window.location.search);
-            const endpoint = urlParams.get("endpoint");
-            const tab = urlParams.get("tab") || "";
+            const baseUrl = urlParams.get("base") || "";
             const confirmEnabled = !["0", "false", "no"].includes(
                 urlParams.get("confirm")?.toLowerCase()
             );
@@ -148,87 +156,52 @@
                 statusEl.className = type;
             }
 
-            function extraParams() {
-                const ignoredParams = new Set(["endpoint", "confirm"]);
-                const params = {};
-
-                urlParams.forEach((value, key) => {
-                    if (!ignoredParams.has(key)) {
-                        params[key] = value;
-                    }
-                });
-
-                return params;
-            }
-
-            function webhookUrl() {
-                const targetUrl = new URL(endpoint);
-
-                Object.entries(extraParams()).forEach(([key, value]) => {
-                    targetUrl.searchParams.set(key, value);
-                });
-
-                return targetUrl.toString();
-            }
-
-            async function sendToGlide(scannedText) {
-                if (!endpoint) {
-                    setStatus("Webhook manquant dans le parametre endpoint.", "error");
-                    return;
-                }
-
-                confirmBtn.disabled = true;
-                cancelBtn.disabled = true;
-                setStatus("Envoi en cours...");
-
+            function getTargetUrl(scannedText) {
                 try {
-                    const response = await fetch(webhookUrl(), {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            qr: scannedText,
-                            text: scannedText,
-                            tab,
-                            params: extraParams(),
-                            scannedAt: new Date().toISOString(),
-                        }),
-                    });
+                    const rawUrl = baseUrl
+                        ? baseUrl + encodeURIComponent(scannedText)
+                        : scannedText;
+                    const targetUrl = new URL(rawUrl);
 
-                    if (!response.ok) {
-                        throw new Error("Erreur webhook");
+                    if (!["http:", "https:"].includes(targetUrl.protocol)) {
+                        return null;
                     }
 
-                    setStatus("Envoye a Glide.", "success");
-                    hideOverlay();
-
-                    setTimeout(() => {
-                        confirmBtn.disabled = false;
-                        cancelBtn.disabled = false;
-                        isBusy = false;
-                        resumeScanning();
-                    }, 700);
+                    return targetUrl.toString();
                 } catch (error) {
-                    setStatus("Impossible d'envoyer au webhook.", "error");
-                    confirmBtn.disabled = false;
-                    cancelBtn.disabled = false;
-
-                    if (!confirmEnabled) {
-                        isBusy = false;
-                        resumeScanning();
-                    }
+                    return null;
                 }
+            }
+
+            function openInGlideApp(scannedText) {
+                const targetUrl = getTargetUrl(scannedText);
+
+                if (!targetUrl) {
+                    setStatus("Le QR code ne contient pas une URL valide.", "error");
+                    return false;
+                }
+
+                fallbackLink.href = targetUrl;
+                fallbackLink.style.display = "inline-block";
+                setStatus("Ouverture de la fiche...", "success");
+                window.open(targetUrl, "_top");
+                return true;
             }
 
             function showOverlay(text) {
                 lastDecodedText = text;
                 overlayData.textContent = text;
+                fallbackLink.style.display = "none";
+                fallbackLink.removeAttribute("href");
                 overlay.style.display = "flex";
-                setStatus("Pret a envoyer a Glide.");
+                setStatus("Pret a ouvrir dans Glide.");
                 html5QrCode.pause(true);
             }
 
             function hideOverlay() {
                 overlay.style.display = "none";
+                fallbackLink.style.display = "none";
+                fallbackLink.removeAttribute("href");
                 lastDecodedText = null;
             }
 
@@ -249,16 +222,15 @@
                             if (isBusy) return;
                             isBusy = true;
 
-                            if (!endpoint) {
-                                showOverlay(decodedText);
-                                setStatus("Webhook manquant dans le parametre endpoint.", "error");
-                                return;
-                            }
-
                             if (confirmEnabled) {
                                 showOverlay(decodedText);
                             } else {
-                                sendToGlide(decodedText);
+                                const opened = openInGlideApp(decodedText);
+
+                                if (!opened) {
+                                    isBusy = false;
+                                    resumeScanning();
+                                }
                             }
                         },
                         () => {}
@@ -270,7 +242,7 @@
 
             confirmBtn.addEventListener("click", () => {
                 if (lastDecodedText) {
-                    sendToGlide(lastDecodedText);
+                    openInGlideApp(lastDecodedText);
                 }
             });
 
