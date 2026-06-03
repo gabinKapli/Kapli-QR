@@ -187,7 +187,8 @@
 
                 const glideRoot =
                     getGlideRootFromUrl(urlParams.get("source")) ||
-                    getGlideRootFromUrl(document.referrer);
+                    getGlideRootFromUrl(document.referrer) ||
+                    getGlideRootFromUrl(window.location.href);
 
                 if (!glideRoot) return null;
 
