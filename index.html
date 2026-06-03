@@ -143,6 +143,7 @@
 
             const urlParams = new URLSearchParams(window.location.search);
             const detailPath = "d83f52/r/";
+            const DEFAULT_GLIDE_ROOT = "https://ostrea.glide.page/dl/02cf21/s/";
             const confirmEnabled = !["0", "false", "no"].includes(
                 urlParams.get("confirm")?.toLowerCase()
             );
@@ -188,7 +189,8 @@
                 const glideRoot =
                     getGlideRootFromUrl(urlParams.get("source")) ||
                     getGlideRootFromUrl(document.referrer) ||
-                    getGlideRootFromUrl(window.location.href);
+                    getGlideRootFromUrl(window.location.href) ||
+                    DEFAULT_GLIDE_ROOT;
 
                 if (!glideRoot) return null;
 
